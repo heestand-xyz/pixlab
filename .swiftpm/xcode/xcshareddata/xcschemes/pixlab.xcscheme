@@ -52,19 +52,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "&quot;$0 + $1 + $2&quot;"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "--input ~/Desktop/pix_in_r.png"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "--input ~/Desktop/pix_in_g.png"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "--input ~/Desktop/pix_in_b.png"
+            argument = "~/Desktop/pix.png"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
