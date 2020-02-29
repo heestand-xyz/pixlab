@@ -1,0 +1,25 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "Expression",
+        "repositoryURL": "https://github.com/nicklockwood/Expression.git",
+        "state": {
+          "branch": null,
+          "revision": "cfe8324c439d7e186057663f8a68df3f283e765e",
+          "version": "0.12.12"
+        }
+      },
+      {
+        "package": "swift-argument-parser",
+        "repositoryURL": "https://github.com/apple/swift-argument-parser",
+        "state": {
+          "branch": null,
+          "revision": "f6ac7b8118ff5d1bc0faee7f37bf6f8fd8f95602",
+          "version": "0.0.1"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
