@@ -2,6 +2,8 @@
 
 Powered by [PixelKit](https://github.com/hexagons/pixelkit) and Metal
 
+![](https://github.com/hexagons/pixlab/blob/master/Assets/Demos/pixlab_demo0.gif?raw=true)
+
 ## Install
 
 Add [pixlab](https://github.com/hexagons/pixlab/raw/master/pixlab) to `/usr/local/bin/`
