@@ -186,6 +186,15 @@ struct Pixlab: ParsableCommand {
                 return blendPix
             }
         }
+        symbols[.infix("->")] = { args in
+            let displacePix = DisplacePIX()
+            displacePix.distance = 1.0
+            displacePix.placement = .aspectFill
+            displacePix.extend = .hold
+            displacePix.inputA = try self.argToPix(args[0])
+            displacePix.inputB = try self.argToPix(args[1])
+            return displacePix
+        }
         let expression = AnyExpression(code, constants: PIXs.pixs, symbols: symbols)
         let pix: PIX & NODEOut = try argToPix(try expression.evaluate())
         return pix
