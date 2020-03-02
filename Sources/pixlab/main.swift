@@ -48,6 +48,8 @@ class PIXs {
     static var pixs: [String: PIX & NODEOut] = [:]
 }
 
+var active: Bool = true
+
 struct Pixlab: ParsableCommand {
     
     @Flag(help: "View the image after render.")
@@ -93,8 +95,8 @@ struct Pixlab: ParsableCommand {
         guard didSetup else {
             throw PIXLabError.metalLibNotFound
         }
-        print("pixlab ready to code:")
-        while true {
+//        print("pixlab ready to code:")
+        while active {
             do {
                 try code()
             } catch {
@@ -106,6 +108,29 @@ struct Pixlab: ParsableCommand {
     func code() throws {
         guard let command: String = readLine() else {
             throw PIXLabError.code("no command")
+        }
+        guard command != "" else {
+            try code()
+            return
+        }
+        guard ![":q", "exit"].contains(command) else {
+            print("exit? y/n")
+            if ["yes", "y"].contains(readLine()) {
+                exit()
+                return
+            }
+            try code()
+            return
+        }
+        guard ![":q!"].contains(command) else {
+            exit()
+            return
+        }
+        guard command != "clear" else {
+            print("\u{001B}[2J")
+            print("abc")
+            try code()
+            return
         }
         if try assign(command) {
             try code()
@@ -154,22 +179,7 @@ struct Pixlab: ParsableCommand {
         for auto in AutoPIXGenerator.allCases {
             let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
             symbols[.function(name, arity: .exactly(1))] = { args in
-                var arg: Any = args.first!
-                if let number: Int = arg as? Int {
-                    arg = "\(number)"
-                }
-                guard let resStr: String = arg as? String else {
-                    throw PIXLabError.pixInitFail("bad res. format: 1920x1080")
-                }
-                let wStr: String = String(resStr.split(separator: "x").first!)
-                let hStr: String = String(resStr.split(separator: "x").last!)
-                guard let w: Int = Int(wStr) else {
-                    throw PIXLabError.pixInitFail("bad res width. format: 1920x1080")
-                }
-                guard let h: Int = Int(hStr) else {
-                    throw PIXLabError.pixInitFail("bad res height. format: 1920x1080")
-                }
-                let res: Resolution = .custom(w: w, h: h)
+                let res: Resolution = try self.res(from: args)
                 let pix: PIXGenerator = auto.pixType.init(at: res)
                 return pix
             }
@@ -241,10 +251,16 @@ struct Pixlab: ParsableCommand {
         guard command.contains("=") else { return false }
         let parts: [String] = command.components(separatedBy: "=")
         var name: String = parts.first!
+        guard !name.isEmpty else {
+            throw PIXLabError.assign("no name")
+        }
         if name.last! == " " {
             name = String(name.dropLast())
         }
         var arg: String = parts.last!
+        guard !arg.isEmpty else {
+            throw PIXLabError.assign("no code")
+        }
         if arg.first! == " " {
             arg = String(arg.dropFirst())
         }
@@ -276,6 +292,9 @@ struct Pixlab: ParsableCommand {
     
     func render(_ pix: PIX) throws {
         var outImg: NSImage?
+        var rendering: Bool? = true
+        startTic()
+        loopTic(while: { rendering })
         let group = DispatchGroup()
         group.enter()
         try PixelKit.main.render.engine.manuallyRender {
@@ -283,6 +302,7 @@ struct Pixlab: ParsableCommand {
             group.leave()
         }
         group.wait()
+        rendering = false
         guard let img: NSImage = outImg else {
             throw PIXLabError.render("render failed")
         }
@@ -291,6 +311,61 @@ struct Pixlab: ParsableCommand {
         if view {
             _ = try shellOut(to: .openFile(at: output.path))
         }
+        rendering = nil
+        endTic()
+    }
+    
+    func res(from args: [Any]) throws -> Resolution {
+        guard let arg: Any = args.first else {
+            throw PIXLabError.pixInitFail("bad res arg count.")
+        }
+        if let val: Double = arg as? Double {
+            return .square(Int(val))
+        }
+        guard let resStr: String = arg as? String else {
+            throw PIXLabError.pixInitFail("bad res. format: 1920x1080")
+        }
+        let wStr: String = String(resStr.split(separator: "x").first!)
+        let hStr: String = String(resStr.split(separator: "x").last!)
+        guard let w: Int = Int(wStr) else {
+            throw PIXLabError.pixInitFail("bad res width. format: 1920x1080")
+        }
+        guard let h: Int = Int(hStr) else {
+            throw PIXLabError.pixInitFail("bad res height. format: 1920x1080")
+        }
+        return .custom(w: w, h: h)
+    }
+    
+    func startTic() {
+        print("...\r", terminator: "")
+        fflush(stdout)
+    }
+    
+    func loopTic(while active: @escaping () -> (Bool?)) {
+        var i = 0
+        self.bgTimer(0.01) {
+            let state: Bool? = active()
+            guard state != nil else { return false }
+            i = (i + 1) % 3
+            print(String.init(repeating: state == true ? "." : ":", count: i + 1) + String.init(repeating: " ", count: 3 - i) + "\r", terminator: "")
+            fflush(stdout)
+            return true
+        }
+    }
+    
+    func endTic() {
+        print("   \r", terminator: "")
+    }
+    
+    func bgTimer(_ duration: Double, _ callback: @escaping () -> (Bool)) {
+        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + .milliseconds(Int(duration * 1_000.0))) {
+            guard callback() else { return }
+            self.bgTimer(duration, callback)
+        }
+    }
+    
+    func exit() {
+        active = false
     }
     
 }
