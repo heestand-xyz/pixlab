@@ -5,6 +5,7 @@ import Expression
 import LiveValues
 import RenderKit
 import PixelKit
+import ShellOut
 
 var didSetup: Bool = false
 var didSetLib: Bool = false
@@ -14,9 +15,9 @@ func setup() {
     guard !didSetup else { return }
     frameLoopRenderThread = .background
     PixelKit.main.render.engine.renderMode = .manual
-//    PixelKit.main.disableLogging()
+    PixelKit.main.disableLogging()
 //    #if DEBUG
-    PixelKit.main.logDebug()
+//    PixelKit.main.logDebug()
 //    #endif
     didSetup = true
 }
@@ -31,13 +32,14 @@ func setLib(url: URL) {
 
 extension URL: ExpressibleByArgument {
     public init?(argument: String) {
-        if argument.starts(with: "/") {
-            self = URL(fileURLWithPath: argument)
-        } else if argument.starts(with: "~/") {
-            self = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(argument.replacingOccurrences(of: "~/", with: ""))
+        let path: String = argument.replacingOccurrences(of: "\\ ", with: " ")
+        if path.starts(with: "/") {
+            self = URL(fileURLWithPath: path)
+        } else if path.starts(with: "~/") {
+            self = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(path.replacingOccurrences(of: "~/", with: ""))
         } else {
             let callURL: URL = URL(fileURLWithPath: CommandLine.arguments.first!)
-            self = callURL.appendingPathComponent(argument)
+            self = callURL.appendingPathComponent(path)
         }
     }
 }
@@ -48,8 +50,8 @@ class PIXs {
 
 struct Pixlab: ParsableCommand {
     
-//    @Flag(help: "Include a counter with each repetition.")
-//    var includeCounter: Bool
+    @Flag(help: "View the image after render.")
+    var view: Bool
 
     @Option(name: .shortAndLong, help: "metal library")
     var metalLib: URL?
@@ -72,8 +74,9 @@ struct Pixlab: ParsableCommand {
         case code(String)
         case assign(String)
         case render(String)
-        case imageNotFound
+//        case imageNotFound
         case corruptImage
+        case pixInitFail(String)
     }
     
     func run() throws {
@@ -88,8 +91,14 @@ struct Pixlab: ParsableCommand {
         guard didSetup else {
             throw PIXLabError.metalLibNotFound
         }
-        print("PIXLab ready to code:")
-        try code()
+        print("pixlab ready to code:")
+        while true {
+            do {
+                try code()
+            } catch {
+                print("pixlab error:", String(describing: error))
+            }
+        }
     }
     
     func code() throws {
@@ -100,21 +109,55 @@ struct Pixlab: ParsableCommand {
             try code()
             return
         }
-        print("command:", command)
+        let pix = try make(command)
+        try render(pix)
+    }
+    
+    func make(_ code: String) throws -> PIX & NODEOut {
         var symbols: [AnyExpression.Symbol: AnyExpression.SymbolEvaluator] = [:]
+        for auto in AutoPIXGenerator.allCases {
+            let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
+            symbols[.function(name, arity: .exactly(1))] = { args in
+                var arg: Any = args.first!
+                if let number: Int = arg as? Int {
+                    arg = "\(number)"
+                }
+                guard let resStr: String = arg as? String else {
+                    throw PIXLabError.pixInitFail("bad res. format: 1920x1080")
+                }
+                let wStr: String = String(resStr.split(separator: "x").first!)
+                let hStr: String = String(resStr.split(separator: "x").last!)
+                guard let w: Int = Int(wStr) else {
+                    throw PIXLabError.pixInitFail("bad res width. format: 1920x1080")
+                }
+                guard let h: Int = Int(hStr) else {
+                    throw PIXLabError.pixInitFail("bad res height. format: 1920x1080")
+                }
+                let res: Resolution = .custom(w: w, h: h)
+                let pix: PIXGenerator = auto.pixType.init(at: res)
+                return pix
+            }
+        }
         for blendMode in BlendMode.allCases {
             let infix: String = PIX.blendOperators.operatorName(of: blendMode)
             symbols[.infix(infix)] = { args in
                 let blendPix = BlendPIX()
                 blendPix.blendMode = blendMode
-                blendPix.inputA = args[0] as! PIX & NODEOut
-                blendPix.inputB = args[1] as! PIX & NODEOut
+                blendPix.inputA = self.argToPix(args[0])
+                blendPix.inputB = self.argToPix(args[1])
                 return blendPix
             }
         }
-        let expression = AnyExpression(command, constants: PIXs.pixs, symbols: symbols)
+        let expression = AnyExpression(code, constants: PIXs.pixs, symbols: symbols)
         let pix: PIX & NODEOut = try expression.evaluate()
-        try render(pix)
+        return pix
+    }
+    
+    func argToPix(_ arg: Any) -> PIX & NODEOut {
+        if let pix = arg as? PIX & NODEOut {
+            return pix
+        }
+//        else if let val = arg as? 
     }
     
     func assign(_ command: String) throws -> Bool {
@@ -124,22 +167,23 @@ struct Pixlab: ParsableCommand {
         if name.last! == " " {
             name = String(name.dropLast())
         }
-        var path: String = parts.last!
-        if path.first! == " " {
-            path = String(path.dropFirst())
+        var arg: String = parts.last!
+        if arg.first! == " " {
+            arg = String(arg.dropFirst())
         }
-        if path.last! == " " {
-            path = String(path.dropLast())
+        if arg.last! == " " {
+            arg = String(arg.dropLast())
         }
-        let url: URL = URL(argument: path)!
-        try loadImage(from: url, as: name)
+        let url: URL = URL(argument: arg)!
+        if FileManager.default.fileExists(atPath: url.path) {
+            try assignImage(from: url, as: name)
+        } else {
+            try assignPIX(code: arg, as: name)
+        }
         return true
     }
     
-    func loadImage(from url: URL, as name: String) throws {
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw PIXLabError.imageNotFound
-        }
+    func assignImage(from url: URL, as name: String) throws {
         guard let image: NSImage = NSImage(contentsOf: url) else {
             throw PIXLabError.corruptImage
         }
@@ -148,8 +192,12 @@ struct Pixlab: ParsableCommand {
         PIXs.pixs[name] = imagePix
     }
     
+    func assignPIX(code: String, as name: String) throws {
+        let pix = try make(code)
+        PIXs.pixs[name] = pix
+    }
+    
     func render(_ pix: PIX) throws {
-        print("will render pix")
         var outImg: NSImage?
         let group = DispatchGroup()
         group.enter()
@@ -161,10 +209,11 @@ struct Pixlab: ParsableCommand {
         guard let img: NSImage = outImg else {
             throw PIXLabError.render("render failed")
         }
-        print("did render pix")
         let outData: Data = NSBitmapImageRep(data: img.tiffRepresentation!)!.representation(using: .png, properties: [:])!
         try outData.write(to: output)
-        print("saved pix")
+        if view {
+            _ = try shellOut(to: .openFile(at: output.path))
+        }
     }
     
 }
