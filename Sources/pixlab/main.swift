@@ -58,8 +58,8 @@ struct Pixlab: ParsableCommand {
     @Option(name: .shortAndLong, help: "metal library")
     var metalLib: URL?
     
-//    @Option(name: .shortAndLong, help: "Input image.")
-//    var input: [URL]
+//    @Option(name: .shortAndLong, help: "resolution. default: 1920x1080")
+//    var resolution: [URL]
 
 //    @Argument()
 //    var prefix: String
@@ -248,24 +248,38 @@ struct Pixlab: ParsableCommand {
     }
     
     func assign(_ command: String) throws -> Bool {
-        guard command.contains("=") else { return false }
+        guard command.contains("=") else {
+            if command.last == "." {
+                let name: String = String(command.dropLast())
+                try listProperties(of: name)
+                return true
+            }
+            return false
+        }
         let parts: [String] = command.components(separatedBy: "=")
         var name: String = parts.first!
-        guard !name.isEmpty else {
+        guard name.count > 0 else {
             throw PIXLabError.assign("no name")
         }
-        if name.last! == " " {
-            name = String(name.dropLast())
+        if name.count > 1 {
+            if name.last! == " " {
+                name = String(name.dropLast())
+            }
         }
         var arg: String = parts.last!
-        guard !arg.isEmpty else {
+        guard arg.count > 0 else {
             throw PIXLabError.assign("no code")
         }
-        if arg.first! == " " {
-            arg = String(arg.dropFirst())
+        if arg.count > 1 {
+            if arg.first! == " " {
+                arg = String(arg.dropFirst())
+            }
+            if arg.last! == " " {
+                arg = String(arg.dropLast())
+            }
         }
-        if arg.last! == " " {
-            arg = String(arg.dropLast())
+        if try assignDot(name, value: arg) {
+            return true
         }
         let url: URL = URL(argument: arg)!
         if FileManager.default.fileExists(atPath: url.path) {
@@ -274,6 +288,128 @@ struct Pixlab: ParsableCommand {
             try assignPIX(code: arg, as: name)
         }
         return true
+    }
+    
+    func assignDot(_ path: String, value: String) throws -> Bool {
+        guard path.contains(".") else { return false }
+        let parts: [String] = path.components(separatedBy: ".")
+        let name: String = parts.first!
+        let property: String = parts.last!
+        guard let pix: PIX & NODEOut = PIXs.pixs[name] else {
+            throw PIXLabError.assign("pix \(name) not found")
+        }
+        for auto in AutoPIXGenerator.allCases {
+            guard String(describing: type(of: pix)) == String(describing: auto.pixType) else { continue }
+            let allProperties: [String] = auto.allAutoPropertyNames(for: pix as! PIXGenerator)
+            guard allProperties.contains(property) else {
+                for iProperty in allProperties {
+                    print(".\(iProperty)")
+                }
+                throw PIXLabError.assign("property \(property) of pix \(name) not found")
+            }
+            let floats = auto.autoLiveFloats(for: pix as! PIXGenerator)
+            if let float = floats.first(where: { $0.name == property }) {
+                let val: Double = try Expression(value).evaluate()
+                float.value = LiveFloat(val)
+                return true
+            }
+            let ints = auto.autoLiveInts(for: pix as! PIXGenerator)
+            if let int = ints.first(where: { $0.name == property }) {
+                let val: Double = try Expression(value).evaluate()
+                int.value = LiveInt(Int(val))
+                return true
+            }
+            let bools = auto.autoLiveBools(for: pix as! PIXGenerator)
+            if let bool = bools.first(where: { $0.name == property }) {
+                if ["true", "True", "YES"].contains(value) {
+                    bool.value = true
+                } else if ["false", "False", "NO"].contains(value) {
+                    bool.value = false
+                } else {
+                    let val: Double = try Expression(value).evaluate()
+                    bool.value = LiveBool(val > 0.0)
+                }
+                return true
+            }
+            let points = auto.autoLivePoints(for: pix as! PIXGenerator)
+            if let point = points.first(where: { $0.name == property }) {
+                let vals: [Double] = try AnyExpression(value).evaluate()
+                guard vals.count == 2 else {
+                    throw PIXLabError.assign("double array needs 2 values [x,y]")
+                }
+                point.value = LivePoint(x: LiveFloat(vals[0]),
+                                        y: LiveFloat(vals[1]))
+                return true
+            }
+            let sizes = auto.autoLiveSizes(for: pix as! PIXGenerator)
+            if let size = sizes.first(where: { $0.name == property }) {
+                let vals: [Double] = try AnyExpression(value).evaluate()
+                guard vals.count == 2 else {
+                    throw PIXLabError.assign("double array needs 2 values [w,h]")
+                }
+                size.value = LiveSize(w: LiveFloat(vals[0]),
+                                      h: LiveFloat(vals[1]))
+                return true
+            }
+            let rects = auto.autoLiveRects(for: pix as! PIXGenerator)
+            if let rect = rects.first(where: { $0.name == property }) {
+                let vals: [Double] = try AnyExpression(value).evaluate()
+                guard vals.count == 4 else {
+                    throw PIXLabError.assign("double array needs 4 values [x,y,w,h]")
+                }
+                rect.value = LiveRect(x: LiveFloat(vals[0]),
+                                      y: LiveFloat(vals[1]),
+                                      w: LiveFloat(vals[2]),
+                                      h: LiveFloat(vals[3]))
+                return true
+            }
+            let colors = auto.autoLiveColors(for: pix as! PIXGenerator)
+            if let color = colors.first(where: { $0.name == property }) {
+                let vals: [Double] = try AnyExpression(value).evaluate()
+                guard vals.count == 4 else {
+                    throw PIXLabError.assign("double array needs 4 values [r,g,b,a]")
+                }
+                color.value = LiveColor(r: LiveFloat(vals[0]),
+                                        g: LiveFloat(vals[1]),
+                                        b: LiveFloat(vals[2]),
+                                        a: LiveFloat(vals[3]))
+                return true
+            }
+            let enums = auto.autoEnums(for: pix as! PIXGenerator)
+            if let _enum = enums.first(where: { $0.name == property }) {
+                guard value.starts(with: ".") else {
+                    throw PIXLabError.assign("start the enum value with a dot (.)")
+                }
+                func list() {
+                    for _case in _enum.cases {
+                        print(".\(_case)")
+                    }
+                }
+                if value == "." {
+                    list()
+                    return true
+                }
+                guard _enum.cases.map({ ".\($0)" }).contains(value) else {
+                    list()
+                    throw PIXLabError.assign("enum value \(value) not found")
+                }
+                _enum.value = String(value.dropFirst())
+            }
+        }
+        throw PIXLabError.assign("unknown dot assign")
+    }
+    
+    func listProperties(of name: String) throws {
+        guard let pix: PIX & NODEOut = PIXs.pixs[name] else {
+            throw PIXLabError.assign("pix \(name) not found")
+        }
+        for auto in AutoPIXGenerator.allCases {
+            guard String(describing: type(of: pix)) == String(describing: auto.pixType) else { continue }
+            let allProperties: [String] = auto.allAutoPropertyNames(for: pix as! PIXGenerator)
+            for iProperty in allProperties {
+                print(".\(iProperty)")
+            }
+        }
     }
     
     func assignImage(from url: URL, as name: String) throws {
