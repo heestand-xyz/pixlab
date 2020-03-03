@@ -11,7 +11,7 @@ Add [pixlab](https://github.com/hexagons/pixlab/raw/master/pixlab) to `/usr/loca
 ## Examples
 
 ~~~~
-$ pixlab ~/Desktop/pix_out.png --metallib ~/PixelKitShaders-macOS.metallib --view
+$ pixlab ~/Desktop/pix_out.png --metal-lib ~/PixelKitShaders-macOS.metallib --view
 RenderKit ready to render.
 > a = /Users/<user>/Desktop/pix_in_a.png
 > b = /Users/<user>/Desktop/pix_in_b.png
@@ -22,7 +22,7 @@ RenderKit ready to render.
 ~~~~
 
 ~~~~
-$ pixlab ~/Desktop/pix_out.png --metallib ~/PixelKitShaders-macOS.metallib --view
+$ pixlab ~/Desktop/pix_out.png --metal-lib ~/PixelKitShaders-macOS.metallib --view
 RenderKit ready to render.
 > ramp = gradient(1024)
 > ramp.
@@ -42,7 +42,7 @@ RenderKit ready to render.
 ~~~~
 
 ~~~~
-$ pixlab ~/Desktop/pix_out.png --metallib ~/PixelKitShaders-macOS.metallib --view
+$ pixlab ~/Desktop/pix_out.png --metal-lib ~/PixelKitShaders-macOS.metallib --view
 RenderKit ready to render.
 > ? 
 arc(res)
