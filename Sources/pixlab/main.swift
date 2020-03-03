@@ -126,12 +126,11 @@ struct Pixlab: ParsableCommand {
             exit()
             return
         }
-        guard command != "clear" else {
-            print("\u{001B}[2J")
-            print("abc")
-            try code()
-            return
-        }
+//        guard command != "clear" else {
+//            print("\u{001B}[2J")
+//            try code()
+//            return
+//        }
         if try assign(command) {
             try code()
             return
