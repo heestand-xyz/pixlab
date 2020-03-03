@@ -100,7 +100,7 @@ struct Pixlab: ParsableCommand {
             do {
                 try code()
             } catch {
-                print("pixlab error:", String(describing: error))
+                print("error:", String(describing: error))
             }
         }
     }

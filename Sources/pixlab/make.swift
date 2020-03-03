@@ -99,9 +99,22 @@ extension Pixlab {
             displacePix.inputB = try self.argToPix(args[1])
             return displacePix
         }
+        symbols[.infix("~>")] = { args in
+            let blurPix = BlurPIX()
+            blurPix.radius = try self.argToVal(args[1])
+            blurPix.input = try self.argToPix(args[0])
+            return blurPix
+        }
         let expression = AnyExpression(code, constants: PIXs.pixs, symbols: symbols)
         let pix: PIX & NODEOut = try argToPix(try expression.evaluate())
         return pix
+    }
+    
+    func argToVal(_ arg: Any) throws -> LiveFloat {
+        if let val: Double = arg as? Double {
+            return LiveFloat(val)
+        }
+        throw PIXLabError.unknownArg(arg)
     }
     
     func argToPix(_ arg: Any) throws -> PIX & NODEOut {
