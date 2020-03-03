@@ -20,6 +20,8 @@ let package = Package(
         .package(path: "~/Code/Frameworks/Production/LiveValues"),
         .package(path: "~/Code/Frameworks/Production/RenderKit"),
         .package(path: "~/Code/Frameworks/Production/PixelKit"),
+//        .package(url: "https://github.com/hexagons/PIXLang.git", from: "0.1.0"),
+        .package(path: "~/Code/Frameworks/Development/PIXLang"),
     ],
     targets: [
         .target(name: "pixlab", dependencies: [
@@ -29,6 +31,7 @@ let package = Package(
             "ArgumentParser",
             "Expression",
             "ShellOut",
+            "PIXLang"
         ])
     ]
 )

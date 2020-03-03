@@ -6,6 +6,7 @@ import LiveValues
 import RenderKit
 import PixelKit
 import ShellOut
+import PIXLang
 
 var didSetup: Bool = false
 var didSetLib: Bool = false
@@ -44,6 +45,27 @@ extension URL: ExpressibleByArgument {
     }
 }
 
+extension Resolution: ExpressibleByArgument {
+    public init?(argument: String) {
+        if argument.contains("x") {
+            let parts: [String] = argument.split(separator: "x").map({"\($0)"})
+            let widthStr: String = parts[0]
+            let heightStr: String = parts[1]
+            guard let width: Int = Int(widthStr),
+                  let height: Int = Int(heightStr) else {
+                return nil
+            }
+            self = .custom(w: width, h: height)
+        } else if let val = Int(argument) {
+            self = .square(val)
+        } else if let res: Resolution = Resolution.standardCases.first(where: { $0.name == argument }) {
+            self = res
+        } else {
+            return nil
+        }
+    }
+}
+
 class PIXs {
     static var pixs: [String: PIX & NODEOut] = [:]
 }
@@ -58,8 +80,8 @@ struct Pixlab: ParsableCommand {
     @Option(name: .shortAndLong, help: "metal library")
     var metalLib: URL?
     
-//    @Option(name: .shortAndLong, help: "resolution. default: 1920x1080")
-//    var resolution: [URL]
+    @Option(name: .shortAndLong, help: "resolution. default is auto.")
+    var resolution: Resolution?
 
 //    @Argument()
 //    var prefix: String
@@ -76,11 +98,10 @@ struct Pixlab: ParsableCommand {
         case code(String)
         case assign(String)
         case render(String)
-//        case imageNotFound
         case corruptImage
-        case pixInitFail(String)
-        case unknownArg(Any)
-        case badArg(String)
+//        case pixInitFail(String)
+//        case unknownArg(Any)
+//        case badArg(String)
     }
     
     func run() throws {
@@ -127,40 +148,55 @@ struct Pixlab: ParsableCommand {
             exit()
             return
         }
-//        guard command != "clear" else {
-//            print("\u{001B}[2J")
-//            try code()
-//            return
-//        }
+        guard command != "clear" else {
+            let clearPix = ColorPIX(at: resolution ?? ._128)
+            clearPix.color = .clear
+            try render(clearPix)
+            try code()
+            return
+        }
         if try assign(command) {
             try code()
             return
         }
         guard command != "?" else {
-            for auto in AutoPIXGenerator.allCases {
-                let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
-                print("\(name)(res)")
-            }
-            for auto in AutoPIXSingleEffect.allCases {
-                let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
-                print("\(name)(pix)")
-            }
-            for auto in AutoPIXMergerEffect.allCases {
-                let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
-                print("\(name)(pixA, pixB)")
-            }
-            for auto in AutoPIXMultiEffect.allCases {
-                let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
-                print("\(name)(pixA, pixB, pixC, ...)")
-            }
+            list()
             try code()
             return
         }
-        let pix = try make(command)
+        let pix = try PIXLang.eval(code: command, with: PIXs.pixs, defaultResolution: resolution)
         try render(pix)
+        try code()
     }
     
-    func render(_ pix: PIX) throws {
+    func list() {
+        for auto in AutoPIXGenerator.allCases {
+            let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
+            print("\(name)(res)")
+        }
+        for auto in AutoPIXSingleEffect.allCases {
+            let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
+            print("\(name)(pix)")
+        }
+        for auto in AutoPIXMergerEffect.allCases {
+            let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
+            print("\(name)(pixA, pixB)")
+        }
+        for auto in AutoPIXMultiEffect.allCases {
+            let name: String = auto.rawValue.replacingOccurrences(of: "pix", with: "")
+            print("\(name)(pixA, pixB, pixC, ...)")
+        }
+    }
+    
+    func render(_ pix: PIX & NODEOut) throws {
+        var finalPix: PIX = pix
+        if let resolution: Resolution = resolution {
+            let resolutionPix = ResolutionPIX(at: resolution)
+            resolutionPix.input = pix
+            resolutionPix.extend = .hold
+            resolutionPix.placement = .aspectFill
+            finalPix = resolutionPix
+        }
         var outImg: NSImage?
         var rendering: Bool? = true
         startTic()
@@ -168,7 +204,7 @@ struct Pixlab: ParsableCommand {
         let group = DispatchGroup()
         group.enter()
         try PixelKit.main.render.engine.manuallyRender {
-            outImg = pix.renderedImage
+            outImg = finalPix.renderedImage
             group.leave()
         }
         group.wait()
@@ -183,27 +219,6 @@ struct Pixlab: ParsableCommand {
         }
         rendering = nil
         endTic()
-    }
-    
-    func res(from args: [Any]) throws -> Resolution {
-        guard let arg: Any = args.first else {
-            throw PIXLabError.pixInitFail("bad res arg count.")
-        }
-        if let val: Double = arg as? Double {
-            return .square(Int(val))
-        }
-        guard let resStr: String = arg as? String else {
-            throw PIXLabError.pixInitFail("bad res. format: 1920x1080")
-        }
-        let wStr: String = String(resStr.split(separator: "x").first!)
-        let hStr: String = String(resStr.split(separator: "x").last!)
-        guard let w: Int = Int(wStr) else {
-            throw PIXLabError.pixInitFail("bad res width. format: 1920x1080")
-        }
-        guard let h: Int = Int(hStr) else {
-            throw PIXLabError.pixInitFail("bad res height. format: 1920x1080")
-        }
-        return .custom(w: w, h: h)
     }
     
     func startTic() {
