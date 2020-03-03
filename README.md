@@ -18,6 +18,7 @@ RenderKit ready to render.
 > a + b
 > a * b
 > a -> b
+> a ~> 0.1
 > :q!
 ~~~~
 
