@@ -394,6 +394,7 @@ struct Pixlab: ParsableCommand {
                     throw PIXLabError.assign("enum value \(value) not found")
                 }
                 _enum.value = String(value.dropFirst())
+                return true
             }
         }
         throw PIXLabError.assign("unknown dot assign")
