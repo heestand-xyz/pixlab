@@ -208,10 +208,11 @@ struct Pixlab: ParsableCommand {
             group.leave()
         }
         group.wait()
-        rendering = false
         guard let img: NSImage = outImg else {
+            rendering = nil
             throw PIXLabError.render("render failed")
         }
+        rendering = false
         let outData: Data = NSBitmapImageRep(data: img.tiffRepresentation!)!.representation(using: .png, properties: [:])!
         try outData.write(to: output)
         if view {
